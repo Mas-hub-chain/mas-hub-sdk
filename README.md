@@ -44,7 +44,7 @@ const project = await sdk.contracts.createProject({
 
 ## Documentation
 
-Full API documentation available at [mas-hub.vercel.app/docs](https://mas-hub.vercel.app/docs)
+Full API documentation available at [maschainhub.com/docs](https://maschainhub.com/docs)
 
 ## Contributing
 

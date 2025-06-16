@@ -1,107 +1,85 @@
-import { MasChainClient } from "@/lib/maschain/client"
+import { MasHubSDK } from "../src/client"
+import { jest, expect } from '@jest/globals'
 
-// Mock fetch globally
-global.fetch = jest.fn()
+// Complete mock fetch implementation
+const mockFetch = jest.fn()
+global.fetch = mockFetch as jest.MockedFunction<typeof fetch>
 
-describe("MasChainClient", () => {
-  let client: MasChainClient
+function createMockResponse(body: any, status: number = 200) {
+  const headers = new Map()
+  headers.set('content-type', 'application/json')
+  
+  return Promise.resolve({
+    ok: status >= 200 && status < 300,
+    status,
+    statusText: status === 401 ? 'Unauthorized' : 'OK',
+    headers: {
+      get: (key: string) => headers.get(key),
+      forEach: (fn: (value: string, key: string) => void) => headers.forEach(fn)
+    },
+    json: () => Promise.resolve(body),
+    text: () => Promise.resolve(JSON.stringify(body)),
+  })
+}
+
+describe("MasHubSDK", () => {
+  let client: MasHubSDK;
   const mockConfig = {
-    apiUrl: "https://api.maschain.com",
-    clientId: "test-client-id",
-    clientSecret: "test-client-secret",
-    network: "testnet" as const,
+    apiKey: "test-api-key",
+    baseUrl: "https://api.mas-hub.vercel.app",
   }
 
   beforeEach(() => {
-    client = new MasChainClient(mockConfig)
+    client = new MasHubSDK(mockConfig)
     jest.clearAllMocks()
   })
 
-  describe("createToken", () => {
-    it("should create a token successfully", async () => {
-      // Mock authentication
-      ;(fetch as jest.Mock)
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve({ access_token: "mock-token" }),
-        })
-        // Mock token creation
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () =>
-            Promise.resolve({
-              success: true,
-              transaction_hash: "0x123456789",
-              token_id: "token-123",
-            }),
-        })
+  describe("request", () => {
+    it("should make successful API requests", async () => {
+      mockFetch.mockImplementation(() => createMockResponse(
+        { success: true, data: "test" },
+        200
+      ))
 
-      const request = {
-        asset_type: "invoice",
-        metadata: {
-          name: "Test Invoice",
-          description: "Test invoice token",
-          quantity: 1,
+      const response = await client.request("/test", {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
+      })
+      expect(response).toEqual({
+        success: true,
+        data: {
+          success: true,
+          data: "test"
         },
-        tenant_id: "user-123",
-      }
-
-      const result = await client.createToken(request)
-
-      expect(result.success).toBe(true)
-      expect(result.transaction_hash).toBe("0x123456789")
-      expect(fetch).toHaveBeenCalledTimes(2)
+        status: 200,
+        headers: {
+          "content-type": "application/json"
+        }
+      })
     })
 
-    it("should handle authentication failure", async () => {
-      ;(fetch as jest.Mock).mockResolvedValueOnce({
-        ok: false,
-        json: () => Promise.resolve({ message: "Invalid credentials" }),
-      })
+    it("should handle API errors", async () => {
+      mockFetch.mockImplementation(() => createMockResponse(
+        { message: "Unauthorized" },
+        401
+      ))
 
-      const request = {
-        asset_type: "invoice",
-        metadata: {
-          name: "Test Invoice",
-          description: "Test invoice token",
-          quantity: 1,
-        },
-        tenant_id: "user-123",
-      }
-
-      await expect(client.createToken(request)).rejects.toThrow("Invalid credentials")
+      await expect(client.request("/test", {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
+      })).rejects.toThrow("Unauthorized")
     })
   })
 
-  describe("performKYC", () => {
-    it("should perform KYC verification successfully", async () => {
-      // Mock authentication
-      ;(fetch as jest.Mock)
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve({ access_token: "mock-token" }),
-        })
-        // Mock KYC verification
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () =>
-            Promise.resolve({
-              success: true,
-              risk_score: 25.5,
-              risk_level: "low_risk",
-              verified: true,
-            }),
-        })
+  describe("ping", () => {
+    it("should return true for successful ping", async () => {
+      mockFetch.mockImplementation(() => createMockResponse(
+        { success: true },
+        200
+      ))
 
-      const request = {
-        wallet_address: "0x742d35Cc6634C0532925a3b8D0C9964E8f3a",
-      }
-
-      const result = await client.performKYC(request)
-
-      expect(result.success).toBe(true)
-      expect(result.data.risk_score).toBe(25.5)
-      expect(result.data.verified).toBe(true)
+      const result = await client.ping()
+      expect(result).toBe(true)
     })
   })
 })

@@ -1,6 +1,7 @@
 // Extended RequestInit with timeout
 export interface RequestInitWithTimeout extends RequestInit {
   timeout?: number
+  retries?: number
 }
 
 // Core SDK Configuration
@@ -58,7 +59,7 @@ export interface SmartContractVersion {
   artifacts?: Array<{
     id: number
     contract_name: string
-    contract_abi: any[]
+    contract_abi: ContractABI
     bytecode: string
     source_code: string
   }>
@@ -82,7 +83,7 @@ export interface DeploymentRequest {
   }
   deployment_params: Array<{
     sc_artifact_id: number
-    params?: Record<string, any>
+    params?: ContractDeploymentParams
     order: number
     signed_trx?: string
   }>
@@ -164,6 +165,37 @@ export interface WebhookEvent {
   event_type: string
   transaction_hash?: string
   contract_address?: string
-  payload: Record<string, any>
+  payload: WebhookPayload
   timestamp: string
+}
+
+export interface ContractABI {
+  inputs: {
+    name: string
+    type: string
+    internalType?: string
+  }[]
+  outputs: {
+    name: string
+    type: string
+    internalType?: string
+  }[]
+  stateMutability: 'pure' | 'view' | 'nonpayable' | 'payable'
+  type: 'function' | 'constructor' | 'event' | 'fallback'
+  name?: string
+  anonymous?: boolean
+}
+
+export interface ContractDeploymentParams {
+  [key: string]: string | number | boolean | string[]
+}
+
+export interface WebhookPayload {
+  event: string
+  data: {
+    contractAddress?: string
+    transactionHash?: string
+    blockNumber?: number
+    [key: string]: unknown
+  }
 }

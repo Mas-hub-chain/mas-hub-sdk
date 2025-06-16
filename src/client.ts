@@ -8,6 +8,9 @@ import { MasHubError, AuthenticationError, NetworkError } from "./errors"
 export class MasHubSDK {
   private config: MasHubConfig
   private accessToken?: string
+  private lastRequestTime = 0
+  private requestQueue: Array<() => Promise<void>> = []
+  private isProcessingQueue = false
 
   // Module instances
   public readonly contracts: ContractsModule
@@ -61,7 +64,25 @@ export class MasHubSDK {
    * Make authenticated API request
    */
   async request<T = any>(endpoint: string, options: RequestInitWithTimeout = {}): Promise<MasHubResponse<T>> {
+    // Rate limiting - max 10 requests per second
+    const now = Date.now()
+    const timeSinceLastRequest = now - this.lastRequestTime
+    
+    if (timeSinceLastRequest < 100) { // 100ms = 10 requests/second
+      await new Promise(resolve => setTimeout(resolve, 100 - timeSinceLastRequest))
+    }
+
     const url = `${this.getBaseUrl()}/api${endpoint}`
+    this.lastRequestTime = Date.now()
+
+    let lastError: Error | undefined
+    const maxRetries = options.retries ?? this.config.retries ?? 3
+    
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      if (attempt > 0) {
+        // Exponential backoff: 100ms, 200ms, 400ms, etc.
+        await new Promise(resolve => setTimeout(resolve, 100 * Math.pow(2, attempt - 1)))
+      }
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), options.timeout || this.config.timeout)
 
@@ -103,11 +124,21 @@ export class MasHubSDK {
     } catch (error: unknown) {
       clearTimeout(timeoutId)
       if (error instanceof MasHubError) {
-        throw error
+        if (attempt === maxRetries) {
+          throw error
+        }
+        lastError = error
+        continue
       }
 
-      throw new NetworkError(`Network request failed: ${error instanceof Error ? error.message : "Unknown error"}`)
+      lastError = new NetworkError(`Network request failed: ${error instanceof Error ? error.message : "Unknown error"}`)
+      if (attempt === maxRetries) {
+        throw lastError
+      }
     }
+    }
+
+    throw lastError || new NetworkError("Request failed after all retries")
   }
 
   private async handleErrorResponse(response: Response): Promise<never> {

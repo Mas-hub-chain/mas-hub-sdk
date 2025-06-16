@@ -1,5 +1,11 @@
 import type { MasHubSDK } from "../client"
 import type { SmartContractProject, SmartContractVersion, DeployedContract, DeploymentRequest } from "../types"
+import { z } from "zod"
+
+const ProjectSchema = z.object({
+  project_name: z.string().min(3).max(50),
+  description: z.string().max(200).optional()
+})
 
 export class ContractsModule {
   constructor(private sdk: MasHubSDK) {}
@@ -11,9 +17,10 @@ export class ContractsModule {
     project_name: string
     description?: string
   }): Promise<SmartContractProject> {
+    const validated = ProjectSchema.parse(data)
     const response = await this.sdk.request<SmartContractProject>("/smart-contracts/projects", {
       method: "POST",
-      body: JSON.stringify(data),
+      body: JSON.stringify(validated),
     })
     return response.data
   }
@@ -23,7 +30,14 @@ export class ContractsModule {
    */
   async listProjects(page = 1): Promise<{
     projects: SmartContractProject[]
-    pagination: any
+    pagination: {
+      total: number
+      per_page: number
+      current_page: number
+      last_page: number
+      from: number
+      to: number
+    }
   }> {
     const response = await this.sdk.request(`/smart-contracts/projects?page=${page}`)
     return {
@@ -94,7 +108,14 @@ export class ContractsModule {
     deployment_id?: string
   }): Promise<{
     contracts: DeployedContract[]
-    pagination: any
+    pagination: {
+      total: number
+      per_page: number
+      current_page: number
+      last_page: number
+      from: number
+      to: number
+    }
   }> {
     const params = new URLSearchParams()
     if (filters?.version) params.append("filter-version", filters.version)
